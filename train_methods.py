@@ -1,12 +1,15 @@
-import torch
 from torch.utils.data import Dataset
-from utils import weight_map
+import os
+import nibabel as nib
+import torch
 from torch import nn
 import numpy as np
+from tqdm import tqdm
+import utils as utils
 
 
-def train(model, optimizer, dataloader, criterion, effective_batch_size, p_bar=None):
-    ''' Training function for a single epoch '''
+def train(model, optimizer, image_dir, label_dir, criterion, device, p_bar=None):
+    ''' Training function for a single epoch using directories of CT scans '''
 
     # Set the model to training mode (activates dropout, batchnorm, etc.)
     model.train()
@@ -17,40 +20,90 @@ def train(model, optimizer, dataloader, criterion, effective_batch_size, p_bar=N
     # Running loss to keep track of total loss over all batches
     running_loss = 0
 
-    # Iterate through each batch in the dataloader
-    for batch_id, (X, y, weights) in enumerate(dataloader):
+    # List all files in the directories
+    image_files = sorted(os.listdir(image_dir))
+    label_files = sorted(os.listdir(label_dir))
 
-        # If a progress bar is provided, update its description
+    # Ensure the directories contain the same number of files
+    print("image length and lable length:",len(image_files), len(label_files))
+    assert len(image_files) == len(label_files), "Mismatch between image and label files"
+
+    for file_idx, (image_file, label_file) in enumerate(zip(image_files, label_files)):
+
+        # Load the CT scan image and label using nibabel
+        image_path = os.path.join(image_dir, image_file)
+        label_path = os.path.join(label_dir, label_file)
+
+        image = nib.load(image_path).get_fdata()  # Shape: (H, W, D)
+        label = nib.load(label_path).get_fdata()  # Shape: (H, W, D)
+        # print shapes
+        print("image shape:", image.shape, label.shape)
+        print("label shape:", label.shape)
+
+        # Ensure the CT scan and label have the same dimensions
+        assert image.shape == label.shape, f"Shape mismatch in {image_file}"
+
+        # The number of layers (slices) in the CT scan
+        num_slices = image.shape[-1]  # Depth of the 3D image
+
+        # Initialize accumulators for loss
+        total_loss = 0
+
+        # Iterate through each layer (slice)
+        for slice_idx in range(num_slices):
+            # Extract the 2D slice for image and label
+            image_slice = image[:, :, slice_idx]
+            label_slice = label[:, :, slice_idx]
+
+            # Compute the weight map for the label slice
+            weights = utils.weight_map(mask=label_slice, w0=10, sigma=5)
+
+            # Normalize the image and label slices
+            image_slice = min_max_scale(image_slice, min_val=0, max_val=1)
+            label_slice = min_max_scale(label_slice, min_val=0, max_val=1)
+
+            # Convert to tensors and move to the specified device
+            image_tensor = torch.from_numpy(image_slice).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
+            label_tensor = torch.from_numpy(label_slice).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
+            weight_tensor = torch.from_numpy(weights).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
+
+            # Forward pass: Get predictions from the model
+            y_hat = model(image_tensor)
+
+            # Compute the loss using the provided criterion
+            loss = criterion(label_tensor, y_hat, weight_tensor)
+
+            # Accumulate loss for the current scan
+            total_loss += loss
+
+        # Backpropagation after processing all slices in the CT scan
+        total_loss.backward()  # Compute gradients for the entire scan
+        optimizer.step()  # Update model weights
+        optimizer.zero_grad()  # Reset gradients
+
+        # Accumulate running loss
+        running_loss += total_loss.item()
+
+        # Update the progress bar if provided
         if p_bar is not None:
-            p_bar.set_description_str(f'Batch {batch_id + 1}')
-
-        # Forward pass: Get predictions from the model
-        y_hat = model(X)
-
-        # Compute the loss using the provided criterion
-        # Loss is normalized by the effective batch size
-        loss = criterion(y, y_hat, weights) / effective_batch_size
-
-        # Add this batch's loss to the running total
-        running_loss += loss.item()
-
-        # Backward pass: Compute gradients of the loss with respect to the model parameters
-        loss.backward()
-
-        # Perform optimizer step after every effective_batch_size batches or at the end of the dataloader
-        if ((batch_id + 1) % effective_batch_size == 0) or ((batch_id + 1) == len(dataloader)):
-            optimizer.step()  # Update model weights
-            optimizer.zero_grad()  # Reset gradients to zero
-
-        # Update the progress bar with the current loss
-        if p_bar is not None:
-            p_bar.set_postfix(loss=loss.item())
+            p_bar.set_postfix(loss=total_loss.item())
             p_bar.update(1)
 
-    # Compute the average loss over all batches, scaled by the effective batch size
-    running_loss = running_loss / len(dataloader) * effective_batch_size
+    # Compute the average loss across all CT scans
+    running_loss /= len(image_files)
 
     return running_loss
+
+@staticmethod
+def min_max_scale(image, max_val, min_val):
+    ''' Normalize an image to the range [min_val, max_val] '''
+    return (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
+
+
+
+
+
+
 
 
 def validation(model, dataloader, criterion):
@@ -90,7 +143,7 @@ class EarlyStopping(object):
             fname: File name to save the best model
         '''
         self.patience = patience
-        self.best_loss = np.Inf  # Initialize the best loss to infinity
+        self.best_loss = np.inf  # Initialize the best loss to infinity
         self.counter = 0  # Count epochs without improvement
         self.filename = fname  # File name for saving the best model
 
@@ -219,8 +272,8 @@ class SegmentationDataset(Dataset):
 
         return image, mask, weights
 
-    @staticmethod
-    def min_max_scale(image, max_val, min_val):
-        ''' Normalize an image to the range [min_val, max_val] '''
-        image_new = (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
-        return image_new
+    # @staticmethod
+    # def min_max_scale(image, max_val, min_val):
+    #     ''' Normalize an image to the range [min_val, max_val] '''
+    #     image_new = (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
+    #     return image_new

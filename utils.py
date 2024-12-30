@@ -98,7 +98,7 @@ def _class_weights(mask):
     unique, counts = np.unique(mask, return_counts = True)
 
     # Convert counts to frequencies
-    counts = counts / np.product(mask.shape)
+    counts = counts / np.prod(mask.shape)
 
     # Get max. counts
     max_count = max(counts)

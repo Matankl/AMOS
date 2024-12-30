@@ -6,12 +6,11 @@ In the following we will implement Unet in pytorch and train on the dataset used
 
 ### Libraries
 
-
 ```python
 from UNet import Unet
 import utils
-import engine
-from learning_rate_range_test import LRTest
+import train_methods
+from WasInOg.learning_rate_range_test import LRTest
 
 import os
 import numpy as np
