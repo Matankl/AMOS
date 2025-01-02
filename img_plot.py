@@ -2,7 +2,7 @@
 import nibabel as nib
 import matplotlib.pyplot as plt
 
-Train_image_dir = 'imagesTr'
+Train_image_dir = 'amos22/imagesTr'
 # Load the .nii.gz file
 file_path = Train_image_dir +'/amos_0590.nii.gz'  # Replace with the path to your file
 

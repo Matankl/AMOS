@@ -194,9 +194,13 @@ class Unet(nn.Module):
         Returns:
             Segmentation map.
         '''
+        print("befoer encoding")
         x = self.encoder(x)  # Pass input through encoder
+        print("after encoding and before decoding")
         x = self.decoder(x, self.encoder.feat_maps)  # Pass through decoder
+        print("after decoding")
         x = self.head(x)  # Final layer
+        print("after segmentation")
         if self.output_size is not None:  # Retain dimensions if output size is specified
             x = torchFuncs.interpolate(x, self.output_size)
         return x

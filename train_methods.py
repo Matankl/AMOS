@@ -35,7 +35,7 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
 
     train_loss = 0.0
     for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)
+        images, labels = images.to(device).float(), labels.to(device).float()
 
         # Forward pass
         outputs = model(images)
@@ -76,7 +76,7 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
     val_loss = 0.0
     with torch.no_grad():
         for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
+            images, labels = images.to(device).float(), labels.to(device).float()
 
             # Forward pass
             outputs = model(images)
@@ -99,6 +99,12 @@ class ImageDataset(Dataset):
         self.image_filenames = sorted(os.listdir(image_dir))
         self.label_filenames = sorted(os.listdir(label_dir))
 
+        self.image_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ])
+
+        self.label_transform = transforms.ToTensor()
 
     def __len__(self):
         return len(self.image_filenames)
@@ -164,89 +170,3 @@ class EarlyStopping(object):
 
 
 #________________________________ private area ________________________________#
-
-def old_train(model, optimizer, image_dir, label_dir, criterion, device, p_bar=None):
-    ''' Training function for a single epoch using directories of CT scans '''
-
-    # Set the model to training mode (activates dropout, batchnorm, etc.)
-    model.train()
-
-    # Initialize the optimizer gradients to zero before starting training
-    optimizer.zero_grad()
-
-    # Running loss to keep track of total loss over all batches
-    running_loss = 0
-
-    # List all files in the directories
-    image_files = sorted(os.listdir(image_dir))
-    label_files = sorted(os.listdir(label_dir))
-
-    # Ensure the directories contain the same number of files
-    print("image length and lable length:",len(image_files), len(label_files))
-    assert len(image_files) == len(label_files), "Mismatch between image and label files"
-
-    for file_idx, (image_file, label_file) in enumerate(zip(image_files, label_files)):
-
-        # Load the CT scan image and label using nibabel
-        image_path = os.path.join(image_dir, image_file)
-        label_path = os.path.join(label_dir, label_file)
-
-        image = nib.load(image_path).get_fdata()  # Shape: (H, W, D)
-        label = nib.load(label_path).get_fdata()  # Shape: (H, W, D)
-        # print shapes
-        print("image shape:", image.shape, label.shape)
-        print("label shape:", label.shape)
-
-        # Ensure the CT scan and label have the same dimensions
-        assert image.shape == label.shape, f"Shape mismatch in {image_file}"
-
-        # The number of layers (slices) in the CT scan
-        num_slices = image.shape[-1]  # Depth of the 3D image
-
-        # Initialize accumulators for loss
-        total_loss = 0
-
-        # Iterate through each layer (slice)
-        for slice_idx in range(num_slices):
-            # Extract the 2D slice for image and label
-            image_slice = image[:, :, slice_idx]
-            label_slice = label[:, :, slice_idx]
-
-            # Compute the weight map for the label slice
-            weights = utils.weight_map(mask=label_slice, w0=10, sigma=5)
-
-            # Normalize the image and label slices
-            image_slice = min_max_scale(image_slice, min_val=0, max_val=1)
-            label_slice = min_max_scale(label_slice, min_val=0, max_val=1)
-
-            # Convert to tensors and move to the specified device
-            image_tensor = torch.from_numpy(image_slice).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
-            label_tensor = torch.from_numpy(label_slice).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
-            weight_tensor = torch.from_numpy(weights).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)  # (1, 1, H, W)
-
-            # Forward pass: Get predictions from the model
-            y_hat = model(image_tensor)
-
-            # Compute the loss using the provided criterion
-            loss = criterion(label_tensor, y_hat, weight_tensor)
-
-            # Accumulate loss for the current scan
-            total_loss += loss
-
-        # Backpropagation after processing all slices in the CT scan
-        total_loss.backward()  # Compute gradients for the entire scan
-        optimizer.step()  # Update model weights
-        optimizer.zero_grad()  # Reset gradients
-
-        # Accumulate running loss
-        running_loss += total_loss.item()
-
-        # Update the progress bar if provided
-        if p_bar is not None:
-            p_bar.set_postfix(loss=total_loss.item())
-            p_bar.update(1)
-
-    # Compute the average loss across all CT scans
-    running_loss /= len(image_files)
-
-    return running_loss
