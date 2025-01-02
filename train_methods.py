@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import os
 import nibabel as nib
 import torch
@@ -6,9 +6,166 @@ from torch import nn
 import numpy as np
 from tqdm import tqdm
 import utils as utils
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+from PIL import Image
+
+def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device):
+    """
+    Train the U-Net model for one epoch.
+
+    Args:
+        model: The U-Net model to train.
+        optimizer: The optimizer for training.
+        batch_size: Batch size for training.
+        image_dir: Directory containing input images.
+        label_dir: Directory containing ground truth labels.
+        criterion: Loss function.
+        device: Device to use ('cuda' or 'cpu').
+
+    Returns:
+        train_loss: Average training loss.
+    """
+    # Dataset
+    train_dataset = ImageDataset(image_dir, label_dir, transform=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    model.train()
+    model.to(device)
+
+    train_loss = 0.0
+    for images, labels in train_loader:
+        images, labels = images.to(device), labels.to(device)
+
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item()
+
+    return train_loss / len(train_loader)
 
 
-def train(model, optimizer, image_dir, label_dir, criterion, device, p_bar=None):
+def validate(model, batch_size, image_dir, label_dir, criterion, device):
+    """
+    Validate the U-Net model for one epoch.
+
+    Args:
+        model: The U-Net model to validate.
+        batch_size: Batch size for validation.
+        image_dir: Directory containing validation images.
+        label_dir: Directory containing ground truth labels.
+        criterion: Loss function.
+        device: Device to use ('cuda' or 'cpu').
+
+    Returns:
+        val_loss: Average validation loss.
+    """
+    # Dataset
+    val_dataset = ImageDataset(image_dir, label_dir, transform=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    model.eval()
+    model.to(device)
+
+    val_loss = 0.0
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+
+            # Forward pass
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            val_loss += loss.item()
+
+    return val_loss / len(val_loader)
+
+
+class ImageDataset(Dataset):
+    """
+    Custom dataset for loading image and label pairs.
+    """
+
+    def __init__(self, image_dir, label_dir, transform=True):
+        self.image_dir = image_dir
+        self.label_dir = label_dir
+        self.transform = transform
+        self.image_filenames = sorted(os.listdir(image_dir))
+        self.label_filenames = sorted(os.listdir(label_dir))
+
+
+    def __len__(self):
+        return len(self.image_filenames)
+
+    def __getitem__(self, idx):
+        image_path = os.path.join(self.image_dir, self.image_filenames[idx])
+        label_path = os.path.join(self.label_dir, self.label_filenames[idx])
+
+        image = Image.open(image_path).convert("RGB")
+        label = Image.open(label_path).convert("L")
+
+        if self.transform:
+            image = self.image_transform(image)
+            label = self.label_transform(label)
+
+        return image, label
+
+
+@staticmethod
+def min_max_scale(image, max_val, min_val):
+    ''' Normalize an image to the range [min_val, max_val] '''
+    return (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
+
+
+class EarlyStopping(object):
+    ''' Implements early stopping to prevent overfitting during training '''
+
+    def __init__(self, patience, fname):
+        '''
+        Args:
+            patience: Number of epochs to wait before stopping if no improvement
+            fname: File name to save the best model
+        '''
+        self.patience = patience
+        self.best_loss = np.inf  # Initialize the best loss to infinity
+        self.counter = 0  # Count epochs without improvement
+        self.filename = fname  # File name for saving the best model
+
+    def __call__(self, epoch, loss, optimizer, model):
+        ''' Check if early stopping condition is met '''
+
+        if loss < self.best_loss:
+            # If current loss is the best so far, reset counter and save the model
+            self.counter = 0
+            self.best_loss = loss
+
+            # Save model state, optimizer state, and loss at the current epoch
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss,
+            }, self.filename)
+
+        else:
+            # Increment the counter if no improvement
+            self.counter += 1
+
+        # Return True if the counter exceeds the patience threshold
+        return self.counter == self.patience
+
+
+
+
+#________________________________ private area ________________________________#
+
+def old_train(model, optimizer, image_dir, label_dir, criterion, device, p_bar=None):
     ''' Training function for a single epoch using directories of CT scans '''
 
     # Set the model to training mode (activates dropout, batchnorm, etc.)
@@ -93,187 +250,3 @@ def train(model, optimizer, image_dir, label_dir, criterion, device, p_bar=None)
     running_loss /= len(image_files)
 
     return running_loss
-
-@staticmethod
-def min_max_scale(image, max_val, min_val):
-    ''' Normalize an image to the range [min_val, max_val] '''
-    return (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
-
-
-
-
-
-
-
-
-def validation(model, dataloader, criterion):
-    ''' Validation function to evaluate model performance on validation data '''
-
-    # Set the model to evaluation mode (disables dropout, batchnorm, etc.)
-    model.eval()
-
-    # Running loss to track validation loss across all batches
-    running_loss = 0
-
-    # Disable gradient calculation for validation (saves memory and speeds up computations)
-    with torch.no_grad():
-        for X, y, weights in dataloader:
-            # Forward pass: Get predictions from the model
-            y_hat = model(X)
-
-            # Compute loss
-            loss = criterion(y, y_hat, weights)
-
-            # Accumulate the loss
-            running_loss += loss.item()
-
-    # Compute the average loss over all validation batches
-    running_loss /= len(dataloader)
-
-    return running_loss
-
-
-class EarlyStopping(object):
-    ''' Implements early stopping to prevent overfitting during training '''
-
-    def __init__(self, patience, fname):
-        '''
-        Args:
-            patience: Number of epochs to wait before stopping if no improvement
-            fname: File name to save the best model
-        '''
-        self.patience = patience
-        self.best_loss = np.inf  # Initialize the best loss to infinity
-        self.counter = 0  # Count epochs without improvement
-        self.filename = fname  # File name for saving the best model
-
-    def __call__(self, epoch, loss, optimizer, model):
-        ''' Check if early stopping condition is met '''
-
-        if loss < self.best_loss:
-            # If current loss is the best so far, reset counter and save the model
-            self.counter = 0
-            self.best_loss = loss
-
-            # Save model state, optimizer state, and loss at the current epoch
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': loss,
-            }, self.filename)
-
-        else:
-            # Increment the counter if no improvement
-            self.counter += 1
-
-        # Return True if the counter exceeds the patience threshold
-        return self.counter == self.patience
-
-
-class WeightedBCEWithLogitsLoss(nn.Module):
-    ''' Implements a pixel-wise weighted Binary Cross Entropy with Logits Loss '''
-
-    def __init__(self, batch_size):
-        '''
-        Args:
-            batch_size: Number of samples in each batch
-        '''
-        super().__init__()
-        self.batch_size = batch_size
-        # BCEWithLogitsLoss combines sigmoid activation with BCE loss
-        self.unw_loss = nn.BCEWithLogitsLoss(reduction='none')
-
-    def __call__(self, true, predicted, weights):
-        '''
-        Args:
-            true: Ground truth labels
-            predicted: Predicted logits
-            weights: Weight map to apply to each pixel
-        Returns:
-            Weighted loss
-        '''
-
-        # Compute unweighted loss for each pixel
-        loss = self.unw_loss(predicted, true) * weights
-
-        # Sum the loss across all channels
-        loss = loss.sum(dim=1)
-
-        # Normalize loss by dividing by weights and reshape
-        loss = loss.view(self.batch_size, -1) / weights.view(self.batch_size, -1)
-
-        # Compute the mean loss across the batch
-        loss = loss.mean()
-
-        return loss
-
-
-class SegmentationDataset(Dataset):
-    ''' Dataset class for segmentation tasks '''
-
-    def __init__(self, images, masks, wmap_w0, wmap_sigma, device, transform=None):
-        '''
-        Args:
-            images: Input images
-            masks: Ground truth segmentation masks
-            wmap_w0: Weight map parameter for object importance
-            wmap_sigma: Weight map parameter for boundary precision
-            device: Device to load the data onto (CPU or GPU)
-            transform: Data augmentation transformations
-        '''
-        self.images = images
-        self.masks = masks
-        self.transform = transform
-        self.device = device
-
-        # Parameters for weight map calculation
-        self.w0 = wmap_w0
-        self.sigma = wmap_sigma
-
-    def __len__(self):
-        ''' Returns the number of samples in the dataset '''
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        '''
-        Preprocess and return an image, its mask, and its weight map
-        '''
-        # Get the image and mask at the given index
-        image = self.images[idx, :, :]
-        mask = self.masks[idx, :, :]
-
-        if self.transform:
-            # Apply data augmentations if any are provided
-            aug = self.transform(image=image, mask=mask)
-            image = aug["image"]
-            mask = aug["mask"]
-
-        # Compute weight map for the mask
-        weights = weight_map(mask=mask, w0=self.w0, sigma=self.sigma)
-
-        # Normalize image and mask to the range [0, 1]
-        image = self.min_max_scale(image, min_val=0, max_val=1)
-        mask = self.min_max_scale(mask, min_val=0, max_val=1)
-
-        # Add channel dimensions to image, mask, and weight map
-        image = np.expand_dims(image, axis=0)
-        weights = np.expand_dims(weights, axis=0)
-        mask = np.expand_dims(mask, axis=0)
-
-        # Convert the data to tensors and move to the specified device
-        weights = torch.from_numpy(weights).double().to(self.device)
-        image = torch.from_numpy(image).double().to(self.device)
-        mask = torch.from_numpy(mask).double().to(self.device)
-
-        # Center crop mask and weights (negative padding = cropping)
-        mask = nn.ZeroPad2d(-94)(mask)
-        weights = nn.ZeroPad2d(-94)(weights)
-
-        return image, mask, weights
-
-    # @staticmethod
-    # def min_max_scale(image, max_val, min_val):
-    #     ''' Normalize an image to the range [min_val, max_val] '''
-    #     image_new = (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
-    #     return image_new
