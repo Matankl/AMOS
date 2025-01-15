@@ -23,6 +23,8 @@ class Block(nn.Module):
         self.conv_1 = nn.Conv2d(in_channel, out_channel, kernel_size)
         # Second convolutional layer
         self.conv_2 = nn.Conv2d(out_channel, out_channel, kernel_size)
+        # # Tird convolutional layer
+        # self.conv_3 = nn.Conv2d(out_channel, out_channel, kernel_size)
         # ReLU activation function
         self.relu = nn.ReLU()
 
@@ -50,10 +52,15 @@ class Block(nn.Module):
         Returns:
             Output tensor after two convolutional layers with ReLU activations.
         '''
+        # print(x.shape, "before first conv")
         x = self.conv_1(x)
         x = self.relu(x)
+        # print(x.shape,"after first conv")
         x = self.conv_2(x)
         x = self.relu(x)
+        # print(x.shape,"after second conv (last)","\n")
+        # x = self.conv_3(x)
+        # x = self.relu(x)
         return x
 
 
@@ -72,10 +79,11 @@ class Encoder(nn.Module):
         # List to store blocks
         modules = []
         for in_channel, out_channel in zip(channels[:-1], channels[1:]):
+            # print(in_channel, out_channel)
             block = Block(in_channel=in_channel, out_channel=out_channel, kernel_size=3)
             modules.append(block)
         self.blocks = nn.ModuleList(modules)  # Store blocks in a ModuleList
-        self.max_pol = nn.MaxPool2d(kernel_size=2, stride=None)  # Max pooling layer for downsampling
+        self.max_pol = nn.MaxPool2d(kernel_size=2, stride=None)  # Max pooling layer for down sampling
         self.feat_maps = []  # Store feature maps for concatenation with the decoder
 
     def forward(self, x):
@@ -91,6 +99,7 @@ class Encoder(nn.Module):
             if not self.is_final_layer(layer_no):
                 self.feat_maps.append(x)  # Store feature map
                 x = self.max_pol(x)  # Apply max pooling
+                # print("x after pull", x.shape)
         return x
 
     def is_final_layer(self, layer_no):
@@ -119,6 +128,7 @@ class Decoder(nn.Module):
         up_convs = []
         blocks = []
         for in_channel, out_channel in zip(channels[:-1], channels[1:]):
+            # print(in_channel, out_channel)
             # 2x2 up-convolution
             upconv = nn.ConvTranspose2d(in_channel, out_channel, kernel_size=2, stride=2)
             up_convs.append(upconv)
@@ -138,11 +148,15 @@ class Decoder(nn.Module):
             Upsampled tensor after passing through the decoder.
         '''
         for upconv, block in zip(self.upconvs, self.blocks):
+            # print(x.shape, " this is before upconv")
             x = upconv(x)  # Apply up-convolution
             fts = encoded_feat_maps.pop()  # Get corresponding feature map from the encoder
+            # print(fts.shape, x.shape)
             fts = self.crop(fts, x.shape[2], x.shape[3])  # Crop feature map to match size
+            # print(fts.shape, x.shape, "after crop")
             x = torch.cat([x, fts], dim=1)  # Concatenate feature map with input
             x = block(x)  # Pass through block
+            # print(x.shape, "this is after block")
         return x
 
     @staticmethod
@@ -180,11 +194,11 @@ class Unet(nn.Module):
         '''
         super().__init__()
         self.output_size = output_size
-        self.encoder = Encoder(channels)  # Initialize encoder
-        dec_channels = list(reversed(channels[1:]))  # Reverse channels for decoder
-        self.decoder = Decoder(dec_channels)  # Initialize decoder
+        self.encoder = Encoder(channels)                                  # Initialize encoder
+        dec_channels = list(reversed(channels[1:]))                       # Reverse channels for decoder
+        self.decoder = Decoder(dec_channels)                              # Initialize decoder
         self.head = nn.Conv2d(in_channels=channels[1], out_channels=no_classes,
-                              kernel_size=1)  # Final layer for segmentation
+                              kernel_size=1)                              # Final layer for segmentation
 
     def forward(self, x):
         '''
@@ -194,13 +208,13 @@ class Unet(nn.Module):
         Returns:
             Segmentation map.
         '''
-        print("befoer encoding")
+        # print("befoer encoding")
         x = self.encoder(x)  # Pass input through encoder
-        print("after encoding and before decoding")
+        # print("before decoding")
         x = self.decoder(x, self.encoder.feat_maps)  # Pass through decoder
-        print("after decoding")
+        # print("after decoding")
         x = self.head(x)  # Final layer
-        print("after segmentation")
+        # print("after segmentation")
         if self.output_size is not None:  # Retain dimensions if output size is specified
             x = torchFuncs.interpolate(x, self.output_size)
         return x

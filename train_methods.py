@@ -34,11 +34,15 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
     model.to(device)
 
     train_loss = 0.0
-    for images, labels in train_loader:
+    for images, labels in tqdm(train_loader):
         images, labels = images.to(device).float(), labels.to(device).float()
 
         # Forward pass
+        # outputs = images.squeeze(1)        # remove all the dimensions with 1 channels
+        # print("image shape:",images.shape)
         outputs = model(images)
+        outputs = outputs.squeeze(1)
+        labels = labels.squeeze(1).long()
         loss = criterion(outputs, labels)
 
         # Backward pass
@@ -75,11 +79,13 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
 
     val_loss = 0.0
     with torch.no_grad():
-        for images, labels in val_loader:
+        for images, labels in tqdm(val_loader):
             images, labels = images.to(device).float(), labels.to(device).float()
 
             # Forward pass
             outputs = model(images)
+            outputs = outputs.squeeze(1)
+            labels = labels.squeeze(1).long()
             loss = criterion(outputs, labels)
 
             val_loss += loss.item()
@@ -98,6 +104,7 @@ class ImageDataset(Dataset):
         self.transform = transform
         self.image_filenames = sorted(os.listdir(image_dir))
         self.label_filenames = sorted(os.listdir(label_dir))
+        # print("init the image database")
 
         self.image_transform = transforms.Compose([
             transforms.ToTensor(),
@@ -113,12 +120,13 @@ class ImageDataset(Dataset):
         image_path = os.path.join(self.image_dir, self.image_filenames[idx])
         label_path = os.path.join(self.label_dir, self.label_filenames[idx])
 
-        image = Image.open(image_path).convert("RGB")
+        image = Image.open(image_path).convert("L")
         label = Image.open(label_path).convert("L")
 
         if self.transform:
             image = self.image_transform(image)
             label = self.label_transform(label)
+
 
         return image, label
 
