@@ -48,29 +48,41 @@ if LOAD_CHECKPOINT:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 # Hold stats for training process
-stats = {'epoch': [], 'train_loss': [], 'val_loss': []}
+stats = {'epoch': [], 'train_loss': [], 'val_loss': [], 'train_iou': [], 'val_iou': [], 'train_f1': [], 'val_f1': []}
 
 # Training  / validation loop
 for epoch in tqdm(range(cur_epoch, EPOCHS)):
     # print(f"Epoch {epoch + 1}/{EPOCHS}")
 
     # Train + validate
-    train_loss = tm.train(AMOS_NET, optimizer, batch_size, os.path.join(DATA_SET_FOLDER, train_mid_in), os.path.join(DATA_SET_FOLDER, train_mid_l), criterion, DEVICE)
-    print(f"Train loss: {train_loss}")
-    # print(f"end of train epoch{epoch}")
+    train_loss, train_iou, train_f1 = tm.train(
+        AMOS_NET, optimizer, batch_size,
+        os.path.join(DATA_SET_FOLDER, train_mid_in),
+        os.path.join(DATA_SET_FOLDER, train_mid_l),
+        criterion, DEVICE
+    )
+    print(f"Train loss: {train_loss}, Train IoU: {train_iou}, Train F1: {train_f1}")
 
-    val_loss = tm.validate(AMOS_NET, batch_size, os.path.join(DATA_SET_FOLDER, val_mid_in), os.path.join(DATA_SET_FOLDER, val_mid_l), criterion, DEVICE)
-    # print(f"end of val epoch: {epoch}")
-    print(f"Validation loss: {val_loss}")
-
+    val_loss, val_iou, val_f1 = tm.validate(
+        AMOS_NET, batch_size,
+        os.path.join(DATA_SET_FOLDER, val_mid_in),
+        os.path.join(DATA_SET_FOLDER, val_mid_l),
+        criterion, DEVICE
+    )
+    print(f"Validation loss: {val_loss}, Validation IoU: {val_iou}, Validation F1: {val_f1}")
 
     # Append stats
     stats['epoch'].append(epoch)
     stats['train_loss'].append(train_loss)
     stats['val_loss'].append(val_loss)
+    stats['train_iou'].append(train_iou)
+    stats['val_iou'].append(val_iou)
+    stats['train_f1'].append(train_f1)
+    stats['val_f1'].append(val_f1)
 
-    # Early stopping (just saves model if validation loss decreases when: pass)
-    if early_stopping(epoch, val_loss, optimizer, AMOS_NET): pass
+    # Early stopping
+    if early_stopping(epoch, val_loss, optimizer, AMOS_NET):
+        pass
 
 
 
@@ -80,6 +92,6 @@ AMOS_NET      = Unet(channels = CHANNELS, no_classes = 1).double().to(DEVICE)
 checkpoint = torch.load(model_path)
 AMOS_NET.load_state_dict(checkpoint['model_state_dict'])
 AMOS_NET.eval()
-test_loss = tm.validate(AMOS_NET, batch_size, os.path.join(DATA_SET_FOLDER, ), os.path.join(DATA_SET_FOLDER, val_mid_l), criterion, DEVICE)
-
+# test_loss = tm.validate(AMOS_NET, batch_size, os.path.join(DATA_SET_FOLDER, ), os.path.join(DATA_SET_FOLDER, val_mid_l), criterion, DEVICE)
+out = AMOS_NET()
 
