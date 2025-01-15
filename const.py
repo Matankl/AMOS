@@ -22,7 +22,8 @@ Train_label_dir = 'amos22/Train/label'
 Val_image_dir = 'amos22/Validation/input'
 Val_label_dir = 'amos22/Validation/label'
 
-
+Test_image_dir = 'amos22/Test/input'
+Test_label_dir = 'amos22/Test/label'
 
 train_mid_in = 'amos22/Train/mid input'
 train_mid_l = 'amos22/Train/mid label'
