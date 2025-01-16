@@ -34,11 +34,15 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
     model.to(device)
 
     train_loss = 0.0
-    for images, labels in train_loader:
+    iou_scores = []
+    f1_scores = []
+    for images, labels in tqdm(train_loader):
         images, labels = images.to(device).float(), labels.to(device).float()
 
         # Forward pass
         outputs = model(images)
+        outputs = outputs.squeeze(1)
+        labels = labels.squeeze(1).long()
         loss = criterion(outputs, labels)
 
         # Backward pass
@@ -48,7 +52,16 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
 
         train_loss += loss.item()
 
-    return train_loss / len(train_loader)
+        # Predictions and metrics
+        preds = torch.argmax(outputs, dim=1).cpu().numpy()  # Convert logits to predicted classes
+        labels_np = labels.cpu().numpy()
+        iou_scores.append(calculate_iou(preds, labels_np, num_classes=model.head.out_channels))
+        f1_scores.append(calculate_f1_score(preds, labels_np, num_classes=model.head.out_channels))
+
+    avg_iou = np.mean(iou_scores)
+    avg_f1 = np.mean(f1_scores)
+
+    return train_loss / len(train_loader) ,avg_iou, avg_f1
 
 
 def validate(model, batch_size, image_dir, label_dir, criterion, device):
@@ -74,17 +87,29 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
     model.to(device)
 
     val_loss = 0.0
+    iou_scores = []
+    f1_scores = []
     with torch.no_grad():
-        for images, labels in val_loader:
+        for images, labels in tqdm(val_loader):
             images, labels = images.to(device).float(), labels.to(device).float()
 
             # Forward pass
             outputs = model(images)
+            outputs = outputs.squeeze(1)
+            labels = labels.squeeze(1).long()
             loss = criterion(outputs, labels)
-
             val_loss += loss.item()
 
-    return val_loss / len(val_loader)
+            # Predictions and metrics
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+            labels_np = labels.cpu().numpy()
+            iou_scores.append(calculate_iou(preds, labels_np, num_classes=model.head.out_channels))
+            f1_scores.append(calculate_f1_score(preds, labels_np, num_classes=model.head.out_channels))
+
+    avg_iou = np.mean(iou_scores)
+    avg_f1 = np.mean(f1_scores)
+
+    return val_loss / len(val_loader), avg_iou, avg_f1
 
 
 class ImageDataset(Dataset):
@@ -98,10 +123,11 @@ class ImageDataset(Dataset):
         self.transform = transform
         self.image_filenames = sorted(os.listdir(image_dir))
         self.label_filenames = sorted(os.listdir(label_dir))
+        # print("init the image database")
 
         self.image_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))
+            transforms.Normalize((0.5,), (0.5,))                            #the normalization may be incorrect!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ])
 
         self.label_transform = transforms.ToTensor()
@@ -113,12 +139,13 @@ class ImageDataset(Dataset):
         image_path = os.path.join(self.image_dir, self.image_filenames[idx])
         label_path = os.path.join(self.label_dir, self.label_filenames[idx])
 
-        image = Image.open(image_path).convert("RGB")
+        image = Image.open(image_path).convert("L")
         label = Image.open(label_path).convert("L")
 
         if self.transform:
             image = self.image_transform(image)
             label = self.label_transform(label)
+
 
         return image, label
 
@@ -167,6 +194,53 @@ class EarlyStopping(object):
         return self.counter == self.patience
 
 
+
+
+
+
+from sklearn.metrics import confusion_matrix
+import numpy as np
+
+def calculate_iou(pred, target, num_classes):
+    """
+    Calculate the Intersection over Union (IoU) score.
+    Args:
+        pred: Predicted labels (batch_size, height, width).
+        target: Ground truth labels (batch_size, height, width).
+        num_classes: Number of classes.
+    Returns:
+        Average IoU score over all classes.
+    """
+    iou_scores = []
+    for cls in range(num_classes):
+        intersection = np.logical_and(pred == cls, target == cls).sum()
+        union = np.logical_or(pred == cls, target == cls).sum()
+        if union == 0:
+            iou_scores.append(1.0)  # Treat empty classes as perfect IoU
+        else:
+            iou_scores.append(intersection / union)
+    return np.mean(iou_scores)
+
+def calculate_f1_score(pred, target, num_classes):
+    """
+    Calculate the F1 score.
+    Args:
+        pred: Predicted labels (batch_size, height, width).
+        target: Ground truth labels (batch_size, height, width).
+        num_classes: Number of classes.
+    Returns:
+        Average F1 score over all classes.
+    """
+    f1_scores = []
+    for cls in range(num_classes):
+        tp = np.logical_and(pred == cls, target == cls).sum()
+        fp = np.logical_and(pred == cls, target != cls).sum()
+        fn = np.logical_and(pred != cls, target == cls).sum()
+        if tp + fp + fn == 0:
+            f1_scores.append(1.0)  # Treat empty classes as perfect F1
+        else:
+            f1_scores.append(2 * tp / (2 * tp + fp + fn))
+    return np.mean(f1_scores)
 
 
 #________________________________ private area ________________________________#

@@ -2,16 +2,11 @@ import train_methods as tm
 from tqdm import tqdm
 from UNet import Unet
 import os
+import torch.nn as nn
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 from const import *
-
-# i dont thing there is a use for them but lets keep it for now
-# act_batch_size = 1
-# momentum = 0.99
-# w0 = 10
-# sigma = 5
 
 
 # Early stopping
@@ -24,12 +19,8 @@ if DEBUGMODE:
     print(f"Number of files in imagesTr: {imagesTR_len}")
 
 
-# Make progress bars
-# pbar_epoch = tqdm(total=epochs, unit='epoch', position=0, leave=False)
-# pbar_train = tqdm(total=imagesTR_len, unit='batch', position=1, leave=False)
-
 # Make model
-AMOS_NET = Unet(channels=CHANNELS, no_classes=16).double().to(DEVICE)
+AMOS_NET = Unet(channels=CHANNELS, no_classes=NUMBER_OF_CLASSES, output_size= (640, 640)).double().to(DEVICE)
 AMOS_NET = AMOS_NET.to(DEVICE).float()
 
 
@@ -40,10 +31,10 @@ optimizer = torch.optim.Adam(
     betas=(0.9, 0.999),  # Coefficients used for computing running averages of gradient and its square
     eps=1e-08,  # Term added to denominator to improve numerical stability
     weight_decay=0  # Weight decay (L2 penalty)
-)
+    )
 
 # Make loss
-criterion = torch.nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss()
 
 
 # Load checkpoint (if it exists)
@@ -57,28 +48,41 @@ if LOAD_CHECKPOINT:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 # Hold stats for training process
-stats = {'epoch': [], 'train_loss': [], 'val_loss': []}
+stats = {'epoch': [], 'train_loss': [], 'val_loss': [], 'train_iou': [], 'val_iou': [], 'train_f1': [], 'val_f1': []}
 
 # Training  / validation loop
-for epoch in range(cur_epoch, EPOCHS):
-    print(f"Epoch {epoch + 1}/{EPOCHS}")
+for epoch in tqdm(range(cur_epoch, EPOCHS)):
+    # print(f"Epoch {epoch + 1}/{EPOCHS}")
 
     # Train + validate
-    train_loss = tm.train(AMOS_NET, optimizer, batch_size, os.path.join(DATA_SET_FOLDER, Train_image_dir), os.path.join(DATA_SET_FOLDER, Train_label_dir), criterion, DEVICE)
-    print(f"Train loss: {train_loss}")
-    print(f"end of train epoch{epoch}")
+    train_loss, train_iou, train_f1 = tm.train(
+        AMOS_NET, optimizer, batch_size,
+        os.path.join(DATA_SET_FOLDER, train_mid_in),
+        os.path.join(DATA_SET_FOLDER, train_mid_l),
+        criterion, DEVICE
+    )
+    print(f"Train loss: {train_loss}, Train IoU: {train_iou}, Train F1: {train_f1}")
 
-    val_loss = tm.validate(AMOS_NET, batch_size, TEMP_FOLSER, TEMP_FOLSER, criterion, DEVICE)
-    print(f"end of val epoch{epoch}")
-
+    val_loss, val_iou, val_f1 = tm.validate(
+        AMOS_NET, batch_size,
+        os.path.join(DATA_SET_FOLDER, val_mid_in),
+        os.path.join(DATA_SET_FOLDER, val_mid_l),
+        criterion, DEVICE
+    )
+    print(f"Validation loss: {val_loss}, Validation IoU: {val_iou}, Validation F1: {val_f1}")
 
     # Append stats
     stats['epoch'].append(epoch)
     stats['train_loss'].append(train_loss)
     stats['val_loss'].append(val_loss)
+    stats['train_iou'].append(train_iou)
+    stats['val_iou'].append(val_iou)
+    stats['train_f1'].append(train_f1)
+    stats['val_f1'].append(val_f1)
 
-    # Early stopping (just saves model if validation loss decreases when: pass)
-    if early_stopping(epoch, val_loss, optimizer, AMOS_NET): pass
+    # Early stopping
+    if early_stopping(epoch, val_loss, optimizer, AMOS_NET):
+        pass
 
 
 
@@ -88,21 +92,6 @@ AMOS_NET      = Unet(channels = CHANNELS, no_classes = 1).double().to(DEVICE)
 checkpoint = torch.load(model_path)
 AMOS_NET.load_state_dict(checkpoint['model_state_dict'])
 AMOS_NET.eval()
+# test_loss = tm.validate(AMOS_NET, batch_size, os.path.join(DATA_SET_FOLDER, ), os.path.join(DATA_SET_FOLDER, val_mid_l), criterion, DEVICE)
+out = AMOS_NET()
 
-# # Make loss
-# criterion = torch.CrossEntropyLoss()
-# with torch.no_grad():
-#     for  (X, y) in enumerate(test_loader):
-#
-#         # Forward
-#         y_hat = AMOS_NET(X)
-#         y_hat = torch.sigmoid(y_hat)
-#
-#
-#         # Convert to numpy
-#         X = np.squeeze(X.cpu().numpy())
-#         y = np.squeeze(y.cpu().numpy())
-#         y_hat = np.squeeze(y_hat.detach().cpu().numpy())
-#
-#         # Make mask
-#         y_hat2 = y_hat > 0.5
