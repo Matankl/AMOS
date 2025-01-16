@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from const import *
 
-
 # Early stopping
 early_stopping = tm.EarlyStopping(patience=100, fname=model_path)
 
@@ -88,7 +87,7 @@ for epoch in tqdm(range(cur_epoch, EPOCHS)):
 
 
 # load model for the testing part
-AMOS_NET      = Unet(channels = CHANNELS, no_classes = 1).double().to(DEVICE)
+AMOS_NET   = Unet(channels = CHANNELS, no_classes = 1).double().to(DEVICE)
 checkpoint = torch.load(model_path)
 AMOS_NET.load_state_dict(checkpoint['model_state_dict'])
 AMOS_NET.eval()

@@ -127,10 +127,9 @@ class ImageDataset(Dataset):
 
         self.image_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))                            #the normalization may be incorrect!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ])
 
-        self.label_transform = transforms.ToTensor()
+        self.label_transform = lambda x: torch.tensor(np.array(x), dtype=torch.long)
 
     def __len__(self):
         return len(self.image_filenames)
@@ -140,7 +139,8 @@ class ImageDataset(Dataset):
         label_path = os.path.join(self.label_dir, self.label_filenames[idx])
 
         image = Image.open(image_path).convert("L")
-        label = Image.open(label_path).convert("L")
+        label = Image.open(label_path).convert("P")
+
 
         if self.transform:
             image = self.image_transform(image)
