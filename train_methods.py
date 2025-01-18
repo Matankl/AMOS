@@ -1,16 +1,12 @@
-from torch.utils.data import Dataset, DataLoader
 import os
-import nibabel as nib
 import torch
-from torch import nn
-import numpy as np
 from tqdm import tqdm
-import utils as utils
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from PIL import Image
+from const import NUMBER_OF_CLASSES
 
-def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device):
+def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device, train_dataset = None):
     """
     Train the U-Net model for one epoch.
 
@@ -25,9 +21,12 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
 
     Returns:
         train_loss: Average training loss.
+        avg_iou: Average IoU score.
+        avg_f1: Average F1 score.
+        avg_accuracy: Average accuracy score.
     """
-    # Dataset
-    train_dataset = ImageDataset(image_dir, label_dir, transform=True)
+    if train_dataset is None:
+        train_dataset = ImageDataset(image_dir, label_dir, transform=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     model.train()
@@ -36,6 +35,8 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
     train_loss = 0.0
     iou_scores = []
     f1_scores = []
+    accuracy_scores = []
+
     for images, labels in tqdm(train_loader):
         images, labels = images.to(device).float(), labels.to(device).float()
 
@@ -53,18 +54,22 @@ def train(model, optimizer, batch_size, image_dir, label_dir, criterion, device)
         train_loss += loss.item()
 
         # Predictions and metrics
-        preds = torch.argmax(outputs, dim=1).cpu().numpy()  # Convert logits to predicted classes
+        preds = torch.argmax(outputs, dim=1).cpu().numpy()
         labels_np = labels.cpu().numpy()
+
+        # Metrics
         iou_scores.append(calculate_iou(preds, labels_np, num_classes=model.head.out_channels))
         f1_scores.append(calculate_f1_score(preds, labels_np, num_classes=model.head.out_channels))
+        accuracy_scores.append((preds == labels_np).mean())  # Compute accuracy for the batch
 
     avg_iou = np.mean(iou_scores)
     avg_f1 = np.mean(f1_scores)
+    avg_accuracy = np.mean(accuracy_scores)
 
-    return train_loss / len(train_loader) ,avg_iou, avg_f1
+    return train_loss / len(train_loader), avg_iou, avg_f1, avg_accuracy
 
 
-def validate(model, batch_size, image_dir, label_dir, criterion, device):
+def validate(model, batch_size, image_dir, label_dir, criterion, device, val_dataset = None):
     """
     Validate the U-Net model for one epoch.
 
@@ -78,9 +83,12 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
 
     Returns:
         val_loss: Average validation loss.
+        avg_iou: Average IoU score.
+        avg_f1: Average F1 score.
+        avg_accuracy: Average accuracy score.
     """
-    # Dataset
-    val_dataset = ImageDataset(image_dir, label_dir, transform=True)
+    if val_dataset is None:
+        val_dataset = ImageDataset(image_dir, label_dir, transform=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     model.eval()
@@ -89,6 +97,8 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
     val_loss = 0.0
     iou_scores = []
     f1_scores = []
+    accuracy_scores = []
+
     with torch.no_grad():
         for images, labels in tqdm(val_loader):
             images, labels = images.to(device).float(), labels.to(device).float()
@@ -103,13 +113,18 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device):
             # Predictions and metrics
             preds = torch.argmax(outputs, dim=1).cpu().numpy()
             labels_np = labels.cpu().numpy()
+
+            # Metrics
             iou_scores.append(calculate_iou(preds, labels_np, num_classes=model.head.out_channels))
             f1_scores.append(calculate_f1_score(preds, labels_np, num_classes=model.head.out_channels))
+            accuracy_scores.append((preds == labels_np).mean())  # Compute accuracy for the batch
 
     avg_iou = np.mean(iou_scores)
     avg_f1 = np.mean(f1_scores)
+    avg_accuracy = np.mean(accuracy_scores)
 
-    return val_loss / len(val_loader), avg_iou, avg_f1
+    return val_loss / len(val_loader), avg_iou, avg_f1, avg_accuracy
+
 
 
 class ImageDataset(Dataset):
@@ -242,5 +257,13 @@ def calculate_f1_score(pred, target, num_classes):
             f1_scores.append(2 * tp / (2 * tp + fp + fn))
     return np.mean(f1_scores)
 
+# weighted loss function
+def compute_class_weights(dataset):
+    total_pixels = 0
+    class_counts = torch.zeros(NUMBER_OF_CLASSES)
+    for _, label in tqdm(dataset):
+        class_counts += torch.bincount(label.flatten(), minlength = NUMBER_OF_CLASSES)
+        total_pixels += label.numel()
+    return total_pixels / (NUMBER_OF_CLASSES * class_counts)
 
 #________________________________ private area ________________________________#

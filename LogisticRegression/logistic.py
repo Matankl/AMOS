@@ -11,11 +11,11 @@ from tqdm import tqdm
 
 def extract_3x3_patch(padded_image, x, y):
     """
-    Extract a 3x3 patch around a pixel at position (x, y) in the padded image.
+    Extract a 5x5 patch around a pixel at position (x, y) in the padded image.
     """
-    x += 1  # Adjust for padding
-    y += 1  # Adjust for padding
-    patch = padded_image[x - 1:x + 2, y - 1:y + 2, :]
+    x += 2  # Adjust for padding
+    y += 2  # Adjust for padding
+    patch = padded_image[x - 2:x + 3, y - 2:y + 3, :]
     return patch.flatten()  # Flatten to a 1D array
 
 
@@ -36,7 +36,7 @@ for i, (img, label) in enumerate(
     img_resized = resize(rgba2rgb(img), (768, 768))
 
     # Pad the image to handle edge cases
-    padded_image = np.pad(img_resized, pad_width=((1, 1), (1, 1), (0, 0)), mode='constant', constant_values=0)
+    padded_image = np.pad(img_resized, pad_width=((2, 2), (2, 2), (0, 0)), mode='constant', constant_values=0)
 
     # Iterate through each pixel in the resized image
     for x in range(img_resized.shape[0]):

@@ -40,15 +40,15 @@ mid_l = r"/home/or/Desktop/DataSets/AMOS/amos22/Train/mid label"
 input = r"/home/or/Desktop/DataSets/AMOS/amos22/Train/input"
 label = r"/home/or/Desktop/DataSets/AMOS/amos22/Train/label"
 
-copy_first_x_files(input, mid_in, 300)
-copy_first_x_files(label, mid_l, 300)
+copy_first_x_files(input, mid_in, 3000)
+copy_first_x_files(label, mid_l, 3000)
 
 mid_in = r"/home/or/Desktop/DataSets/AMOS/amos22/Validation/mid input"
 mid_l = r"/home/or/Desktop/DataSets/AMOS/amos22/Validation/mid label"
 input = r"/home/or/Desktop/DataSets/AMOS/amos22/Validation/input"
 label = r"/home/or/Desktop/DataSets/AMOS/amos22/Validation/label"
 
-copy_first_x_files(input, mid_in, 300)
-copy_first_x_files(label, mid_l, 300)
+copy_first_x_files(input, mid_in, 3000)
+copy_first_x_files(label, mid_l, 3000)
 
 
