@@ -7,7 +7,7 @@ from const import *
 
 print("Setting up weights for the classes")
 train_dataset = tm.ImageDataset(os.path.join(DATA_SET_FOLDER, train_mid_in), os.path.join(DATA_SET_FOLDER, train_mid_l), transform=True)
-# class_weights = tm.compute_class_weights(train_dataset, 16)
+class_weights = tm.compute_class_weights(train_dataset, 16)
 
 
 import torch
@@ -70,18 +70,19 @@ class MultiClassLoss(nn.Module):
         return loss
 
 
-# criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE))
-criterion = MultiClassLoss(alpha=0.5, beta=0.5, num_classes=16)
+criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE))
+# criterion = MultiClassLoss(alpha=0.5, beta=0.5, num_classes=16)
 
 
 class Patience:
-    def __init__(self, patience=5):
+    def __init__(self, patience=5, treshold = 0.001):
         self.patience = patience
         self.best_value = float('inf')  # Assuming minimization; use `-inf` for maximization
         self.counter = 0
+        self.treshold = treshold
 
     def check(self, value):
-        if value < self.best_value:  # Improvement condition
+        if value * (1 + self.treshold) < self.best_value:  # Improvement condition
             self.best_value = value
             self.counter = 0  # Reset patience
         else:
@@ -101,7 +102,7 @@ def objective(trial):
     torch.cuda.ipc_collect()  # Collects any unused memory from inter-process communication
 
     # Reset patience for each trial
-    patience = Patience(patience=3)
+    patience = Patience(patience=3, treshold = 0.001)
 
     # Suggest hyperparameters
     learning_rate = trial.suggest_loguniform('lr', 5e-5, 0.01)

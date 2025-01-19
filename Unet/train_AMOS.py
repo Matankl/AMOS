@@ -46,11 +46,12 @@ if LOAD_CHECKPOINT:
 stats = {'epoch': [], 'train_loss': [], 'val_loss': [], 'train_iou': [], 'val_iou': [], 'train_f1': [], 'val_f1': [], 'train_acc': [], 'val_acc': []}
 
 
-train_dataset = tm.ImageDataset(os.path.join(DATA_SET_FOLDER, train_mid_in), os.path.join(DATA_SET_FOLDER, train_mid_l), transform=True)
+# train_dataset = tm.ImageDataset(os.path.join(DATA_SET_FOLDER, train_mid_in), os.path.join(DATA_SET_FOLDER, train_mid_l), transform=True)
 
 # Make loss
-class_weights = tm.compute_class_weights(train_dataset)
-criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE))
+# class_weights = tm.compute_class_weights(train_dataset)
+# criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE))
+criterion = nn.CrossEntropyLoss()
 
 # Training  / validation loop
 for epoch in tqdm(range(cur_epoch, EPOCHS)):

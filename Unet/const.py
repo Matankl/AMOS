@@ -13,9 +13,9 @@ DEBUGMODE = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # saved model path
-model_path = './model.pth'
+model_path = '../Fixed Models/model_with_weighted_lossbatch2_lr_7.890813261743468e-05_10epoch.pth'
 
-DATA_SET_FOLDER = '/home/or/Desktop/DataSets/AMOS/'
+DATA_SET_FOLDER = '/home/or/Desktop/DataSets/AMOS'
 
 Train_image_dir = 'amos22/Train/input'
 Train_label_dir = 'amos22/Train/label'

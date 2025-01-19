@@ -1,6 +1,7 @@
 import os
 import shutil
 import random
+from Unet.const import *
 
 def copy_random_x_files(input_dir, label_dir, output_input_dir, output_label_dir, x, seed=42):
     """
@@ -60,24 +61,24 @@ def copy_random_x_files(input_dir, label_dir, output_input_dir, output_label_dir
         print(f"Copied: {label_src_path} -> {label_dest_path}")
 
 # Paths
-AMOS_PATH = r"D:\Database\Images\amos22 (1)\amos22"
+# AMOS_PATH = r"D:\Database\Images\amos22 (1)\amos22"
 
 # Training set
 copy_random_x_files(
-    input_dir=f"{AMOS_PATH}/Train/input",
-    label_dir=f"{AMOS_PATH}/Train/label",
-    output_input_dir=f"{AMOS_PATH}/Train/mid input",
-    output_label_dir=f"{AMOS_PATH}/Train/mid label",
+    input_dir=f"{DATA_SET_FOLDER}/Train/input",
+    label_dir=f"{DATA_SET_FOLDER}/Train/label",
+    output_input_dir=f"{DATA_SET_FOLDER}/Train/mid input",
+    output_label_dir=f"{DATA_SET_FOLDER}/Train/mid label",
     x=1000,
     seed=62
 )
 
 # Validation set
 copy_random_x_files(
-    input_dir=f"{AMOS_PATH}/Validation/input",
-    label_dir=f"{AMOS_PATH}/Validation/label",
-    output_input_dir=f"{AMOS_PATH}/Validation/mid input",
-    output_label_dir=f"{AMOS_PATH}/Validation/mid label",
-    x=200,
+    input_dir=f"{DATA_SET_FOLDER}/Validation/input",
+    label_dir=f"{DATA_SET_FOLDER}/Validation/label",
+    output_input_dir=f"{DATA_SET_FOLDER}/Validation/mid input",
+    output_label_dir=f"{DATA_SET_FOLDER}/Validation/mid label",
+    x=1000,
     seed=62
 )
