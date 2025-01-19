@@ -5,6 +5,7 @@ import os
 import torch.nn as nn
 from const import *
 
+
 # Early stopping
 early_stopping = tm.EarlyStopping(patience = 3, fname=model_path)
 
@@ -28,8 +29,6 @@ optimizer = torch.optim.Adam(
     eps = 1e-08,  # Term added to denominator to improve numerical stability
     weight_decay = WEIGHT_DECAY # Weight decay (L2 penalty)
     )
-
-
 
 
 # Load checkpoint (if it exists)
@@ -95,14 +94,4 @@ for epoch in tqdm(range(cur_epoch, EPOCHS)):
     # Early stopping
     if early_stopping(epoch, val_loss, optimizer, AMOS_NET):
         pass
-
-
-
-# # load model for the testing part
-# AMOS_NET = Unet(channels = CHANNELS, no_classes = 1).double().to(DEVICE)
-# checkpoint = torch.load(model_path)
-# AMOS_NET.load_state_dict(checkpoint['model_state_dict'])
-# AMOS_NET.eval()
-# # test_loss = tm.validate(AMOS_NET, batch_size, os.path.join(DATA_SET_FOLDER, ), os.path.join(DATA_SET_FOLDER, val_mid_l), criterion, DEVICE)
-# out = AMOS_NET()
 

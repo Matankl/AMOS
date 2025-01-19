@@ -23,8 +23,6 @@ class Block(nn.Module):
         self.conv_1 = nn.Conv2d(in_channel, out_channel, kernel_size)
         # Second convolutional layer
         self.conv_2 = nn.Conv2d(out_channel, out_channel, kernel_size)
-        # # Tird convolutional layer
-        # self.conv_3 = nn.Conv2d(out_channel, out_channel, kernel_size)
         # ReLU activation function
         self.relu = nn.ReLU()
 
@@ -59,8 +57,6 @@ class Block(nn.Module):
         x = self.conv_2(x)
         x = self.relu(x)
         # print(x.shape,"after second conv (last)","\n")
-        # x = self.conv_3(x)
-        # x = self.relu(x)
         return x
 
 
@@ -128,7 +124,6 @@ class Decoder(nn.Module):
         up_convs = []
         blocks = []
         for in_channel, out_channel in zip(channels[:-1], channels[1:]):
-            # print(in_channel, out_channel)
             # 2x2 up-convolution
             upconv = nn.ConvTranspose2d(in_channel, out_channel, kernel_size=2, stride=2)
             up_convs.append(upconv)

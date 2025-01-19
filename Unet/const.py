@@ -13,7 +13,7 @@ DEBUGMODE = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # saved model path
-model_path = '../Fixed Models/model_with_weighted_lossbatch2_lr_7.890813261743468e-05_10epoch.pth'
+model_path = '/home/or/PycharmProjects/AMOS/Fixed Models/best_unet_trial_0_0.1404.pth'
 
 DATA_SET_FOLDER = '/home/or/Desktop/DataSets/AMOS'
 

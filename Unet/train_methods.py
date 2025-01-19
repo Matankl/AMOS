@@ -1,6 +1,5 @@
 import os
-import random
-
+import numpy as np
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
@@ -128,7 +127,6 @@ def validate(model, batch_size, image_dir, label_dir, criterion, device, val_dat
     return val_loss / len(val_loader), avg_iou, avg_f1, avg_accuracy
 
 
-
 class ImageDataset(Dataset):
     """
     Custom dataset for loading image and label pairs.
@@ -144,6 +142,7 @@ class ImageDataset(Dataset):
 
         self.image_transform = transforms.Compose([
             transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))  # Normalize grayscale images to [-1, 1]
         ])
 
         self.label_transform = lambda x: torch.tensor(np.array(x), dtype=torch.long)
@@ -165,12 +164,6 @@ class ImageDataset(Dataset):
 
 
         return image, label
-
-
-@staticmethod
-def min_max_scale(image, max_val, min_val):
-    ''' Normalize an image to the range [min_val, max_val] '''
-    return (image - np.min(image)) * (max_val - min_val) / (np.max(image) - np.min(image)) + min_val
 
 
 class EarlyStopping(object):
@@ -210,15 +203,6 @@ class EarlyStopping(object):
         # Return True if the counter exceeds the patience threshold
         return self.counter == self.patience
 
-
-
-
-
-
-from sklearn.metrics import confusion_matrix
-import numpy as np
-
-import numpy as np
 
 def calculate_iou(pred, target, num_classes):
     """
