@@ -1,4 +1,6 @@
 import os
+import random
+
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
@@ -136,9 +138,9 @@ class ImageDataset(Dataset):
         self.image_dir = image_dir
         self.label_dir = label_dir
         self.transform = transform
+
         self.image_filenames = sorted(os.listdir(image_dir))
         self.label_filenames = sorted(os.listdir(label_dir))
-        # print("init the image database")
 
         self.image_transform = transforms.Compose([
             transforms.ToTensor(),
@@ -216,25 +218,25 @@ class EarlyStopping(object):
 from sklearn.metrics import confusion_matrix
 import numpy as np
 
+import numpy as np
+
 def calculate_iou(pred, target, num_classes):
     """
-    Calculate the Intersection over Union (IoU) score.
-    Args:
-        pred: Predicted labels (batch_size, height, width).
-        target: Ground truth labels (batch_size, height, width).
-        num_classes: Number of classes.
-    Returns:
-        Average IoU score over all classes.
+    Compute mean IoU for multi-class segmentation while avoiding fake high scores.
     """
     iou_scores = []
+
     for cls in range(num_classes):
         intersection = np.logical_and(pred == cls, target == cls).sum()
         union = np.logical_or(pred == cls, target == cls).sum()
+
         if union == 0:
-            iou_scores.append(1.0)  # Treat empty classes as perfect IoU
+            iou_scores.append(np.nan)  # Ignore empty classes
         else:
             iou_scores.append(intersection / union)
-    return np.mean(iou_scores)
+
+    return np.nanmean(iou_scores)  # Avoids bias from empty classes
+
 
 def calculate_f1_score(pred, target, num_classes):
     """
@@ -258,12 +260,28 @@ def calculate_f1_score(pred, target, num_classes):
     return np.mean(f1_scores)
 
 # weighted loss function
-def compute_class_weights(dataset):
+def compute_class_weights(dataset, num_classes, epsilon=1e-6, scaling="sqrt"):
     total_pixels = 0
-    class_counts = torch.zeros(NUMBER_OF_CLASSES)
+    class_counts = torch.zeros(num_classes, dtype=torch.float32)
+
     for _, label in tqdm(dataset):
-        class_counts += torch.bincount(label.flatten(), minlength = NUMBER_OF_CLASSES)
+        class_counts += torch.bincount(label.flatten(), minlength=num_classes).to(torch.float32)
         total_pixels += label.numel()
-    return total_pixels / (NUMBER_OF_CLASSES * class_counts)
+
+    # Avoid division by zero by adding a small epsilon
+    class_counts += epsilon
+
+    # Compute weights
+    if scaling == "sqrt":
+        weights = 1.0 / torch.sqrt(class_counts)  # Square-root scaling
+    elif scaling == "log":
+        weights = 1.0 / torch.log1p(class_counts)  # Log scaling
+    else:
+        weights = total_pixels / (num_classes * class_counts)  # Inverse frequency
+
+    # Normalize weights to keep them in a reasonable range
+    weights /= weights.sum() * num_classes
+
+    return weights
 
 #________________________________ private area ________________________________#
